@@ -1,9 +1,11 @@
+# frozen_string_literal: true
+
 class JobsManager
   @@managers = {}
   attr :adapter_name
 
   def self.current_manager
-    @@managers[ENV['AJADAPTER']] ||= new(ENV['AJADAPTER'])
+    @@managers[ENV["AJ_ADAPTER"]] ||= new(ENV["AJ_ADAPTER"])
   end
 
   def initialize(adapter_name)

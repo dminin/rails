@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module ActionView #:nodoc:
   # = Action View PathSet
   #
@@ -46,32 +48,47 @@ module ActionView #:nodoc:
       find_all(*args).first || raise(MissingTemplate.new(self, *args))
     end
 
+    alias :find_file :find
+    deprecate :find_file
+
     def find_all(path, prefixes = [], *args)
-      prefixes = [prefixes] if String === prefixes
-      prefixes.each do |prefix|
-        paths.each do |resolver|
-          templates = resolver.find_all(path, prefix, *args)
-          return templates unless templates.empty?
-        end
-      end
-      []
+      _find_all path, prefixes, args
     end
 
     def exists?(path, prefixes, *args)
       find_all(path, prefixes, *args).any?
     end
 
-    private
+    def find_all_with_query(query) # :nodoc:
+      paths.each do |resolver|
+        templates = resolver.find_all_with_query(query)
+        return templates unless templates.empty?
+      end
 
-    def typecast(paths)
-      paths.map do |path|
-        case path
-        when Pathname, String
-          OptimizedFileSystemResolver.new path.to_s
-        else
-          path
+      []
+    end
+
+    private
+      def _find_all(path, prefixes, args)
+        prefixes = [prefixes] if String === prefixes
+        prefixes.each do |prefix|
+          paths.each do |resolver|
+            templates = resolver.find_all(path, prefix, *args)
+            return templates unless templates.empty?
+          end
+        end
+        []
+      end
+
+      def typecast(paths)
+        paths.map do |path|
+          case path
+          when Pathname, String
+            OptimizedFileSystemResolver.new path.to_s
+          else
+            path
+          end
         end
       end
-    end
   end
 end

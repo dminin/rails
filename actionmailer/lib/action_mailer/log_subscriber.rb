@@ -1,14 +1,20 @@
-require 'active_support/log_subscriber'
+# frozen_string_literal: true
+
+require "active_support/log_subscriber"
 
 module ActionMailer
   # Implements the ActiveSupport::LogSubscriber for logging notifications when
-  # email is delivered and received.
+  # email is delivered or received.
   class LogSubscriber < ActiveSupport::LogSubscriber
     # An email was delivered.
     def deliver(event)
       info do
-        recipients = Array(event.payload[:to]).join(', ')
-        "\nSent mail to #{recipients} (#{event.duration.round(1)}ms)"
+        perform_deliveries = event.payload[:perform_deliveries]
+        if perform_deliveries
+          "Delivered mail #{event.payload[:message_id]} (#{event.duration.round(1)}ms)"
+        else
+          "Skipped delivery of mail #{event.payload[:message_id]} as `perform_deliveries` is false"
+        end
       end
 
       debug { event.payload[:mail] }
@@ -16,7 +22,7 @@ module ActionMailer
 
     # An email was received.
     def receive(event)
-      info { "\nReceived mail (#{event.duration.round(1)}ms)" }
+      info { "Received mail (#{event.duration.round(1)}ms)" }
       debug { event.payload[:mail] }
     end
 
@@ -25,11 +31,11 @@ module ActionMailer
       debug do
         mailer = event.payload[:mailer]
         action = event.payload[:action]
-        "\n#{mailer}##{action}: processed outbound mail in #{event.duration.round(1)}ms"
+        "#{mailer}##{action}: processed outbound mail in #{event.duration.round(1)}ms"
       end
     end
 
-    # Use the logger configured for ActionMailer::Base
+    # Use the logger configured for ActionMailer::Base.
     def logger
       ActionMailer::Base.logger
     end

@@ -1,193 +1,83 @@
-*   Changed the meaning of `render "foo/bar"`.
+*   `ActionView::Base.annotate_template_file_names` annotates HTML output with template file names.
 
-    Previously, calling `render "foo/bar"` in a controller action is equivalent
-    to `render file: "foo/bar"`. In Rails 4.2, this has been changed to mean
-    `render template: "foo/bar"` instead. If you need to render a file, please
-    change your code to use the explicit form (`render file: "foo/bar"`) instead.
+    *Joel Hawksley*, *Aaron Patterson*
 
-    *Jeremy Jackson*
+*   `ActionView::Helpers::TranslationHelper#translate` returns nil when
+    passed `default: nil` without a translation matching `I18n#translate`.
 
-*   Add support for ARIA attributes in tags.
+    *Stefan Wrobel*
 
-    Example:
+*   `OptimizedFileSystemResolver` prefers template details in order of locale,
+    formats, variants, handlers.
 
-        <%= f.text_field :name, aria: { required: "true", hidden: "false" } %>
+    *Iago Pimenta*
 
-    now generates:
+*   Added `class_names` helper to create a CSS class value with conditional classes.
 
-         <input aria-hidden="false" aria-required="true" id="user_name" name="user[name]" type="text">
+    *Joel Hawksley*, *Aaron Patterson*
 
-    *Paola Garcia Casadiego*
+*   Add support for conditional values to TagBuilder.
 
-*   Provide a `builder` object when using the `label` form helper in block form.
+    *Joel Hawksley*
 
-    The new `builder` object responds to `translation`, allowing I18n fallback support
-    when you want to customize how a particular label is presented.
+*   `ActionView::Helpers::FormOptionsHelper#select` should mark option for `nil` as selected.
 
-    *Alex Robbin*
+    ```ruby
+    @post = Post.new
+    @post.category = nil
 
-*   Add I18n support for input/textarea placeholder text.
+    # Before
+    select("post", "category", none: nil, programming: 1, economics: 2)
+    # =>
+    # <select name="post[category]" id="post_category">
+    #   <option value="">none</option>
+    #  <option value="1">programming</option>
+    #  <option value="2">economics</option>
+    # </select>
 
-    Placeholder I18n follows the same convention as `label` I18n.
+    # After
+    select("post", "category", none: nil, programming: 1, economics: 2)
+    # =>
+    # <select name="post[category]" id="post_category">
+    #   <option selected="selected" value="">none</option>
+    #  <option value="1">programming</option>
+    #  <option value="2">economics</option>
+    # </select>
+    ```
 
-    *Alex Robbin*
+    *bogdanvlviv*
 
-*   Fix that render layout: 'messages/layout' should also be added to the dependency tracker tree.
+*   Log lines for partial renders and started template renders are now
+    emitted at the `DEBUG` level instead of `INFO`.
+
+    Completed template renders are still logged at the `INFO` level.
 
     *DHH*
 
-*   Add `PartialIteration` object used when rendering collections.
+*   ActionView::Helpers::SanitizeHelper: support rails-html-sanitizer 1.1.0.
 
-    The iteration object is available as the local variable
-    `#{template_name}_iteration` when rendering partials with collections.
+    *Juanito Fatas*
 
-    It gives access to the `size` of the collection being iterated over,
-    the current `index` and two convenience methods `first?` and `last?`.
+*   Added `phone_to` helper method to create a link from mobile numbers.
 
-    *Joel Junström*, *Lucas Uyezu*
+    *Pietro Moro*
 
-*   Return an absolute instead of relative path from an asset url in the case
-    of the `asset_host` proc returning nil.
+*   annotated_source_code returns an empty array so TemplateErrors without a
+    template in the backtrace are surfaced properly by DebugExceptions.
 
-    *Jolyon Pawlyn*
+    *Guilherme Mansur*, *Kasper Timm Hansen*
 
-*   Fix `html_escape_once` to properly handle hex escape sequences (e.g. &#x1a2b;).
+*   Add autoload for SyntaxErrorInTemplate so syntax errors are correctly raised by DebugExceptions.
 
-    *John F. Douthat*
+    *Guilherme Mansur*, *Gannon McGibbon*
 
-*   Added String support for min and max properties for date field helpers.
+*   `RenderingHelper` supports rendering objects that `respond_to?` `:render_in`.
 
-    *Todd Bealmear*
+    *Joel Hawksley*, *Natasha Umer*, *Aaron Patterson*, *Shawn Allen*, *Emily Plummer*, *Diana Mounter*, *John Hawthorn*, *Nathan Herald*, *Zaid Zawaideh*, *Zach Ahn*
 
-*   The `highlight` helper now accepts a block to be used instead of the `highlighter`
-    option.
+*   Fix `select_tag` so that it doesn't change `options` when `include_blank` is present.
 
-    *Lucas Mazza*
+    *Younes SERRAJ*
 
-*   The `except` and `highlight` helpers now accept regular expressions.
 
-    *Jan Szumiec*
-
-*   Flatten the array parameter in `safe_join`, so it behaves consistently with
-    `Array#join`.
-
-    *Paul Grayson*
-
-*   Honor `html_safe` on array elements in tag values, as we do for plain string
-    values.
-
-    *Paul Grayson*
-
-*   Add `ActionView::Template::Handler.unregister_template_handler`.
-
-    It performs the opposite of `ActionView::Template::Handler.register_template_handler`.
-
-    *Zuhao Wan*
-
-*   Bring `cache_digest` rake tasks up-to-date with the latest API changes.
-
-    *Jiri Pospisil*
-
-*   Allow custom `:host` option to be passed to `asset_url` helper that
-    overwrites `config.action_controller.asset_host` for particular asset.
-
-    *Hubert Łępicki*
-
-*   Deprecate `AbstractController::Base.parent_prefixes`.
-    Override `AbstractController::Base.local_prefixes` when you want to change
-    where to find views.
-
-    *Nick Sutterer*
-
-*   Take label values into account when doing I18n lookups for model attributes.
-
-    The following:
-
-        # form.html.erb
-        <%= form_for @post do |f| %>
-          <%= f.label :type, value: "long" %>
-        <% end %>
-
-        # en.yml
-        en:
-          activerecord:
-            attributes:
-              post/long: "Long-form Post"
-
-    Used to simply return "long", but now it will return "Long-form
-    Post".
-
-    *Joshua Cody*
-
-*   Change `asset_path` to use File.join to create proper paths:
-
-    Before:
-
-        https://some.host.com//assets/some.js
-
-    After:
-
-        https://some.host.com/assets/some.js
-
-    *Peter Schröder*
-
-*   Change `favicon_link_tag` default mimetype from `image/vnd.microsoft.icon` to
-    `image/x-icon`.
-
-    Before:
-
-        # => favicon_link_tag 'myicon.ico'
-        <link href="/assets/myicon.ico" rel="shortcut icon" type="image/vnd.microsoft.icon" />
-
-    After:
-
-        # => favicon_link_tag 'myicon.ico'
-        <link href="/assets/myicon.ico" rel="shortcut icon" type="image/x-icon" />
-
-    *Geoffroy Lorieux*
-
-*   Remove wrapping div with inline styles for hidden form fields.
-
-    We are dropping HTML 4.01 and XHTML strict compliance since input tags directly
-    inside a form are valid HTML5, and the absence of inline styles help in validating
-    for Content Security Policy.
-
-    *Joost Baaij*
-
-*   `collection_check_boxes` respects `:index` option for the hidden field name.
-
-    Fixes #14147.
-
-    *Vasiliy Ermolovich*
-
-*   `date_select` helper with option `with_css_classes: true` does not overwrite other classes.
-
-    *Izumi Wong-Horiuchi*
-
-*   `number_to_percentage` does not crash with `Float::NAN` or `Float::INFINITY`
-    as input.
-
-    Fixes #14405.
-
-    *Yves Senn*
-
-*   Add `include_hidden` option to `collection_check_boxes` helper.
-
-    *Vasiliy Ermolovich*
-
-*   Fixed a problem where the default options for the `button_tag` helper are not
-    applied correctly.
-
-    Fixes #14254.
-
-    *Sergey Prikhodko*
-
-*   Take variants into account when calculating template digests in ActionView::Digestor.
-
-    The arguments to ActionView::Digestor#digest are now being passed as a hash
-    to support variants and allow more flexibility in the future. The support for
-    regular (required) arguments is deprecated and will be removed in Rails 5.0 or later.
-
-    *Piotr Chmolowski, Łukasz Strzałkowski*
-
-Please check [4-1-stable](https://github.com/rails/rails/blob/4-1-stable/actionview/CHANGELOG.md) for previous changes.
+Please check [6-0-stable](https://github.com/rails/rails/blob/6-0-stable/actionview/CHANGELOG.md) for previous changes.

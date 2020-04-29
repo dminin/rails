@@ -1,19 +1,20 @@
-require 'active_record/associations/join_dependency/join_part'
+# frozen_string_literal: true
+
+require "active_record/associations/join_dependency/join_part"
+require "active_support/core_ext/array/extract"
 
 module ActiveRecord
   module Associations
     class JoinDependency # :nodoc:
       class JoinAssociation < JoinPart # :nodoc:
-        # The reflection of the association represented
-        attr_reader :reflection
-
-        attr_accessor :tables
+        attr_reader :reflection, :tables
+        attr_accessor :table
 
         def initialize(reflection, children)
           super(reflection.klass, children)
 
-          @reflection      = reflection
-          @tables          = nil
+          @reflection = reflection
+          @tables     = nil
         end
 
         def match?(other)
@@ -21,101 +22,67 @@ module ActiveRecord
           super && reflection == other.reflection
         end
 
-        JoinInformation = Struct.new :joins, :binds
-
-        def join_constraints(foreign_table, foreign_klass, node, join_type, tables, scope_chain, chain)
-          joins         = []
-          bind_values   = []
-          tables        = tables.reverse
-
-          scope_chain_index = 0
-          scope_chain = scope_chain.reverse
+        def join_constraints(foreign_table, foreign_klass, join_type, alias_tracker)
+          joins = []
 
           # The chain starts with the target table, but we want to end with it here (makes
           # more sense in this context), so we reverse
-          chain.reverse_each do |reflection|
-            table = tables.shift
+          reflection.chain.reverse_each.with_index(1) do |reflection, i|
+            table = tables[-i]
             klass = reflection.klass
 
-            join_keys   = reflection.join_keys(klass)
-            key         = join_keys.key
-            foreign_key = join_keys.foreign_key
+            join_scope = reflection.join_scope(table, foreign_table, foreign_klass)
 
-            constraint = build_constraint(klass, table, key, foreign_table, foreign_key)
+            arel = join_scope.arel(alias_tracker.aliases)
+            nodes = arel.constraints.first
 
-            scope_chain_items = scope_chain[scope_chain_index].map do |item|
-              if item.is_a?(Relation)
-                item
-              else
-                ActiveRecord::Relation.create(klass, table).instance_exec(node, &item)
+            if nodes.is_a?(Arel::Nodes::And)
+              others = nodes.children.extract! do |node|
+                !Arel.fetch_attribute(node) { |attr| attr.relation.name == table.name }
               end
             end
-            scope_chain_index += 1
 
-            scope_chain_items.concat [klass.send(:build_default_scope, ActiveRecord::Relation.create(klass, table))].compact
+            joins << table.create_join(table, table.create_on(nodes), join_type)
 
-            rel = scope_chain_items.inject(scope_chain_items.shift) do |left, right|
-              left.merge right
+            if others && !others.empty?
+              joins.concat arel.join_sources
+              append_constraints(joins.last, others)
             end
-
-            if rel && !rel.arel.constraints.empty?
-              bind_values.concat rel.bind_values
-              constraint = constraint.and rel.arel.constraints
-            end
-
-            if reflection.type
-              value = foreign_klass.base_class.name
-              column = klass.columns_hash[reflection.type.to_s]
-
-              substitute = klass.connection.substitute_at(column, bind_values.length)
-              bind_values.push [column, value]
-              constraint = constraint.and table[reflection.type].eq substitute
-            end
-
-            joins << table.create_join(table, table.create_on(constraint), join_type)
 
             # The current table in this iteration becomes the foreign table in the next
             foreign_table, foreign_klass = table, klass
           end
 
-          JoinInformation.new joins, bind_values
+          joins
         end
 
-        #  Builds equality condition.
-        #
-        #  Example:
-        #
-        #  class Physician < ActiveRecord::Base
-        #    has_many :appointments
-        #  end
-        #
-        #  If I execute `Physician.joins(:appointments).to_a` then
-        #    klass         # => Physician
-        #    table         # => #<Arel::Table @name="appointments" ...>
-        #    key           # =>  physician_id
-        #    foreign_table # => #<Arel::Table @name="physicians" ...>
-        #    foreign_key   # => id
-        #
-        def build_constraint(klass, table, key, foreign_table, foreign_key)
-          constraint = table[key].eq(foreign_table[foreign_key])
+        def tables=(tables)
+          @tables = tables
+          @table  = tables.first
+        end
 
-          if klass.finder_needs_type_condition?
-            constraint = table.create_and([
-              constraint,
-              klass.send(:type_condition, table)
-            ])
+        def readonly?
+          return @readonly if defined?(@readonly)
+
+          @readonly = reflection.scope && reflection.scope_for(base_klass.unscoped).readonly_value
+        end
+
+        def strict_loading?
+          return @strict_loading if defined?(@strict_loading)
+
+          @strict_loading = reflection.scope && reflection.scope_for(base_klass.unscoped).strict_loading_value
+        end
+
+        private
+          def append_constraints(join, constraints)
+            if join.is_a?(Arel::Nodes::StringJoin)
+              join_string = table.create_and(constraints.unshift(join.left))
+              join.left = Arel.sql(base_klass.connection.visitor.compile(join_string))
+            else
+              right = join.right
+              right.expr = Arel::Nodes::And.new(constraints.unshift right.expr)
+            end
           end
-
-          constraint
-        end
-
-        def table
-          tables.first
-        end
-
-        def aliased_table_name
-          table.table_alias || table.name
-        end
       end
     end
   end

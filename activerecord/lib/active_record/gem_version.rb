@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module ActiveRecord
   # Returns the version of the currently loaded Active Record as a <tt>Gem::Version</tt>
   def self.gem_version
@@ -5,10 +7,10 @@ module ActiveRecord
   end
 
   module VERSION
-    MAJOR = 4
-    MINOR = 2
+    MAJOR = 6
+    MINOR = 1
     TINY  = 0
-    PRE   = "beta2"
+    PRE   = "alpha"
 
     STRING = [MAJOR, MINOR, TINY, PRE].compact.join(".")
   end

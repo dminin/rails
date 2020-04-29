@@ -1,26 +1,13 @@
-# This class is inherited by the has_many and has_many_and_belongs_to_many association classes
+# frozen_string_literal: true
 
-require 'active_record/associations'
+require "active_record/associations"
 
-module ActiveRecord::Associations::Builder
+module ActiveRecord::Associations::Builder # :nodoc:
   class CollectionAssociation < Association #:nodoc:
-
     CALLBACKS = [:before_add, :after_add, :before_remove, :after_remove]
 
-    def valid_options
-      super + [:table_name, :before_add,
-               :after_add, :before_remove, :after_remove, :extend]
-    end
-
-    attr_reader :block_extension
-
-    def initialize(model, name, scope, options)
-      super
-      @mod = nil
-      if block_given?
-        @mod = Module.new(&Proc.new)
-        @scope = wrap_scope @scope, @mod
-      end
+    def self.valid_options(options)
+      super + [:before_add, :after_add, :before_remove, :after_remove, :extend]
     end
 
     def self.define_callbacks(model, reflection)
@@ -32,10 +19,11 @@ module ActiveRecord::Associations::Builder
       }
     end
 
-    def define_extensions(model)
-      if @mod
-        extension_module_name = "#{model.name.demodulize}#{name.to_s.camelize}AssociationExtension"
-        model.parent.const_set(extension_module_name, @mod)
+    def self.define_extensions(model, name, &block)
+      if block_given?
+        extension_module_name = "#{name.to_s.camelize}AssociationExtension"
+        extension = Module.new(&block)
+        model.const_set(extension_module_name, extension)
       end
     end
 
@@ -78,14 +66,6 @@ module ActiveRecord::Associations::Builder
       CODE
     end
 
-    private
-
-    def wrap_scope(scope, mod)
-      if scope
-        proc { |owner| instance_exec(owner, &scope).extending(mod) }
-      else
-        proc { extending(mod) }
-      end
-    end
+    private_class_method :valid_options, :define_callback, :define_extensions, :define_readers, :define_writers
   end
 end

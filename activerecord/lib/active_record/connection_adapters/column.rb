@@ -1,46 +1,38 @@
-require 'set'
+# frozen_string_literal: true
 
 module ActiveRecord
   # :stopdoc:
   module ConnectionAdapters
     # An abstract definition of a column in a table.
     class Column
-      TRUE_VALUES = [true, 1, '1', 't', 'T', 'true', 'TRUE', 'on', 'ON'].to_set
-      FALSE_VALUES = [false, 0, '0', 'f', 'F', 'false', 'FALSE', 'off', 'OFF'].to_set
+      include Deduplicable
 
-      module Format
-        ISO_DATE = /\A(\d{4})-(\d\d)-(\d\d)\z/
-        ISO_DATETIME = /\A(\d{4})-(\d\d)-(\d\d) (\d\d):(\d\d):(\d\d)(\.\d+)?\z/
-      end
+      attr_reader :name, :default, :sql_type_metadata, :null, :default_function, :collation, :comment
 
-      attr_reader :name, :cast_type, :null, :sql_type, :default, :default_function
-
-      delegate :type, :precision, :scale, :limit, :klass, :accessor,
-        :number?, :binary?, :changed?,
-        :type_cast_from_user, :type_cast_from_database, :type_cast_for_database,
-        :type_cast_for_schema,
-        to: :cast_type
+      delegate :precision, :scale, :limit, :type, :sql_type, to: :sql_type_metadata, allow_nil: true
 
       # Instantiates a new column in the table.
       #
-      # +name+ is the column's name, such as <tt>supplier_id</tt> in <tt>supplier_id int(11)</tt>.
+      # +name+ is the column's name, such as <tt>supplier_id</tt> in <tt>supplier_id bigint</tt>.
       # +default+ is the type-casted default value, such as +new+ in <tt>sales_stage varchar(20) default 'new'</tt>.
-      # +cast_type+ is the object used for type casting and type information.
-      # +sql_type+ is used to extract the column's length, if necessary. For example +60+ in
-      # <tt>company_name varchar(60)</tt>.
-      # It will be mapped to one of the standard Rails SQL types in the <tt>type</tt> attribute.
+      # +sql_type_metadata+ is various information about the type of the column
       # +null+ determines if this column allows +NULL+ values.
-      def initialize(name, default, cast_type, sql_type = nil, null = true)
-        @name             = name
-        @cast_type        = cast_type
-        @sql_type         = sql_type
-        @null             = null
-        @default          = default
-        @default_function = nil
+      def initialize(name, default, sql_type_metadata = nil, null = true, default_function = nil, collation: nil, comment: nil, **)
+        @name = name.freeze
+        @sql_type_metadata = sql_type_metadata
+        @null = null
+        @default = default
+        @default_function = default_function
+        @collation = collation
+        @comment = comment
       end
 
       def has_default?
-        !default.nil?
+        !default.nil? || default_function
+      end
+
+      def bigint?
+        /\Abigint\b/.match?(sql_type)
       end
 
       # Returns the human name of the column name.
@@ -51,10 +43,65 @@ module ActiveRecord
         Base.human_attribute_name(@name)
       end
 
-      def with_type(type)
-        dup.tap do |clone|
-          clone.instance_variable_set('@cast_type', type)
+      def init_with(coder)
+        @name = coder["name"]
+        @sql_type_metadata = coder["sql_type_metadata"]
+        @null = coder["null"]
+        @default = coder["default"]
+        @default_function = coder["default_function"]
+        @collation = coder["collation"]
+        @comment = coder["comment"]
+      end
+
+      def encode_with(coder)
+        coder["name"] = @name
+        coder["sql_type_metadata"] = @sql_type_metadata
+        coder["null"] = @null
+        coder["default"] = @default
+        coder["default_function"] = @default_function
+        coder["collation"] = @collation
+        coder["comment"] = @comment
+      end
+
+      def ==(other)
+        other.is_a?(Column) &&
+          name == other.name &&
+          default == other.default &&
+          sql_type_metadata == other.sql_type_metadata &&
+          null == other.null &&
+          default_function == other.default_function &&
+          collation == other.collation &&
+          comment == other.comment
+      end
+      alias :eql? :==
+
+      def hash
+        Column.hash ^
+          name.hash ^
+          name.encoding.hash ^
+          default.hash ^
+          sql_type_metadata.hash ^
+          null.hash ^
+          default_function.hash ^
+          collation.hash ^
+          comment.hash
+      end
+
+      private
+        def deduplicated
+          @name = -name
+          @sql_type_metadata = sql_type_metadata.deduplicate if sql_type_metadata
+          @default = -default if default
+          @default_function = -default_function if default_function
+          @collation = -collation if collation
+          @comment = -comment if comment
+          super
         end
+    end
+
+    class NullColumn < Column
+      def initialize(name, **)
+        super(name, nil)
       end
     end
   end
